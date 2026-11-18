@@ -1,11 +1,9 @@
-﻿#if NET481
-using System;
+﻿using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
-#endif
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Diagnostics;
@@ -21,9 +19,7 @@ namespace SseClientLib
         private bool _disposed;
 
         private readonly TimeSpan _keepAliveTimeout;
-
-#if NET481
-
+        
         public event Action OnConnected;
         public event Action OnDisconnected;
 
@@ -32,16 +28,6 @@ namespace SseClientLib
 
         public event Action<string> OnLog;
         public event Action<string, Exception> OnError;
-#elif NET9_0_OR_GREATER
-        public event Action? OnConnected;
-        public event Action? OnDisconnected;
-
-        public event Action? OnPing;
-        public event Action<string>? OnRawMessageReceived;
-
-        public event Action<string>? OnLog;
-        public event Action<string, Exception>? OnError;
-#endif
 
         public SseClient(string relativeEndpoint, string query, HttpClient client, TimeSpan? keepAliveTimeout = null)
         {
@@ -68,15 +54,10 @@ namespace SseClientLib
 
         public async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
-#if NET481
             var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
 
             var request = new HttpRequestMessage(HttpMethod.Get, _endpoint);
-#elif NET9_0_OR_GREATER
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, _endpoint);
-#endif
+            
             request.Headers.Add("SseClientLib", _header);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
@@ -133,22 +114,14 @@ namespace SseClientLib
 
         private async Task ReadStreamAsync(HttpResponseMessage response, CancellationToken cancellationToken)
         {
-#if NET481
             var stream = await response.Content.ReadAsStreamAsync();
             var reader = new StreamReader(stream);
-#elif NET9_0_OR_GREATER
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var reader = new StreamReader(stream);
-#endif
 
             List<string> dataLines = new List<string>();
             while (!cancellationToken.IsCancellationRequested)
             {
-#if NET481
                 var readTask = reader.ReadLineAsync();
-#elif NET9_0_OR_GREATER
-                var readTask = reader.ReadLineAsync(cancellationToken).AsTask();
-#endif
+
                 var timeoutTask = Task.Delay(_keepAliveTimeout, cancellationToken);
 
                 var completedTask = await Task.WhenAny(readTask, timeoutTask);
@@ -159,12 +132,8 @@ namespace SseClientLib
                     OnError?.Invoke(ex.Message, ex);
                     throw ex;
                 }
-
-#if NET481
+                
                 string line;
-#elif NET9_0_OR_GREATER
-                string? line;
-#endif
                 try
                 {
                     line = await readTask;
